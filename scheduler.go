@@ -21,9 +21,10 @@ import (
 // jobScheduler.AddRecurrentJob(job, interval)
 // jobScheduler.Stop()
 type JobScheduler struct {
-	running  bool
-	quit     chan bool
-	wg       sync.WaitGroup
+	mutex   sync.RWMutex
+	running bool
+	quit    chan bool
+	wg      sync.WaitGroup
 	pwg     *sync.WaitGroup
 }
 
@@ -36,7 +37,6 @@ type Job func(params ...interface{})
 func NewJobScheduler() *JobScheduler {
 	js := JobScheduler{
 		running: false,
-		quit:    make(chan bool),
 	}
 	js.pwg = &js.wg
 	return &js
@@ -45,16 +45,21 @@ func NewJobScheduler() *JobScheduler {
 // Start the JobScheduler. The JobScheduler needs to be started before you add any jobs to
 // it, otherwise the jobs would be ignored by JobScheduler.
 func (js *JobScheduler) Start() {
+        defer js.mutex.Unlock()
+	js.mutex.Lock()
 	if js.running {
 		return
 	}
 	js.running = true
+	js.quit = make(chan bool)
 }
 
 // Add a function object as job to the job scheduler. The job would be executed exactly
 // once at `startTime`. If startTime is equal or earlier than `time.Now()`, the job
 // would be executed immediately after the function is called.
 func (js *JobScheduler) AddJob(job Job, startTime time.Time, jobParams ...interface{}) {
+	defer js.mutex.RUnlock()
+	js.mutex.RLock()
 	if !js.running {
 		return
 	}
@@ -62,9 +67,9 @@ func (js *JobScheduler) AddJob(job Job, startTime time.Time, jobParams ...interf
 		defer js.pwg.Done()
 		js.pwg.Add(1)
 		select {
-		case <- quit:
+		case <-quit:
 			return
-		case <- time.After(startTime.Sub(time.Now())):
+		case <-time.After(startTime.Sub(time.Now())):
 			job(jobParams...)
 		}
 	}(js.quit)
@@ -75,6 +80,8 @@ func (js *JobScheduler) AddJob(job Job, startTime time.Time, jobParams ...interf
 // `startTime`. If startTime is equal or earlier than `time.Now()`, the first job
 // execution would happen immediately and then executes with interval.
 func (js *JobScheduler) AddRecurrentJob(job Job, startTime time.Time, interval time.Duration, jobParams ...interface{}) {
+	defer js.mutex.RUnlock()
+	js.mutex.RLock()
 	if !js.running {
 		return
 	}
@@ -82,9 +89,9 @@ func (js *JobScheduler) AddRecurrentJob(job Job, startTime time.Time, interval t
 		defer js.pwg.Done()
 		js.pwg.Add(1)
 		select {
-		case <- quit:
+		case <-quit:
 			return
-		case <- time.After(startTime.Sub(time.Now())):
+		case <-time.After(startTime.Sub(time.Now())):
 		}
 		ticker := time.NewTicker(interval)
 		job(jobParams...)
@@ -107,6 +114,8 @@ func (js *JobScheduler) AddRecurrentJob(job Job, startTime time.Time, interval t
 // required to call Stop from the goroutine where JobScheduler instance is created
 // before it terminates, otherwise the program might have a panic or crash.
 func (js *JobScheduler) Stop() {
+	defer js.mutex.Unlock()
+	js.mutex.Lock()
 	if !js.running {
 		return
 	}
@@ -114,4 +123,3 @@ func (js *JobScheduler) Stop() {
 	close(js.quit)
 	js.pwg.Wait()
 }
-
