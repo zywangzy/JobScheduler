@@ -87,7 +87,7 @@ func (js *JobScheduler) AddRecurrentJob(job Job, startTime time.Time, interval t
 		case <- time.After(startTime.Sub(time.Now())):
 		}
 		ticker := time.NewTicker(interval)
-		job()
+		job(jobParams...)
 		for {
 			select {
 			case <-quit:
