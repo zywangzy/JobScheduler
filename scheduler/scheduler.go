@@ -1,3 +1,5 @@
+// Package scheduler provides class JobScheduler to schedule jobs to run at given times or
+// recurrent jobs to run at given interval starting at given time.
 package scheduler
 
 import (
@@ -5,17 +7,19 @@ import (
 	"time"
 )
 
-/* Usage:
- * var jobScheduler JobScheduler
- * jobScheduler.start()
- * var job func()
- * scheduledTime := time.Now() + time.Duration(10)
- * jobScheduler.addJob(job, scheduledTime)
- * interval := time.Duration(10) * time.Minute
- * jobScheduler.addRecurrentJob(job, interval)
- * jobScheduler.stop()
- */
-
+// Class JobScheduler
+// Usage:
+// Create and start the job scheduler
+// jobScheduler := NewJobScheduler()
+// jobScheduler.Start()
+// Then just add jobs to the scheduler with scheduled time for execution:
+// job := func() { do your stuff }
+// scheduledTime := time.Now() + time.Duration(10)
+// jobScheduler.AddJob(job, scheduledTime)
+// You can also schedule a job with fixed interval and scheduled time for first execution:
+// interval := time.Minute * 10
+// jobScheduler.AddRecurrentJob(job, interval)
+// jobScheduler.Stop()
 type JobScheduler struct {
 	running bool
 	quit    chan bool
@@ -23,8 +27,12 @@ type JobScheduler struct {
 	pwg     *sync.WaitGroup
 }
 
+// Class Job to be executed by job scheduler. Notice that the Job instances don't return
+// values explicitly.
 type Job func()
 
+// Function to create new JobScheduler instance, which returns a pointer pointing to the
+// newly created instance.
 func NewJobScheduler() *JobScheduler {
 	js := JobScheduler{
 		running: false,
@@ -34,6 +42,8 @@ func NewJobScheduler() *JobScheduler {
 	return &js
 }
 
+// Start the JobScheduler. The JobScheduler needs to be started before you add any jobs to
+// it, otherwise the jobs would be ignored by JobScheduler.
 func (js *JobScheduler) Start() {
 	if js.running {
 		return
@@ -41,6 +51,9 @@ func (js *JobScheduler) Start() {
 	js.running = true
 }
 
+// Add a function object as job to the job scheduler. The job would be executed exactly
+// once at `startTime`. If startTime is equal or earlier than `time.Now()`, the job
+// would be executed immediately after the function is called.
 func (js *JobScheduler) AddJob(job Job, startTime time.Time) {
 	if !js.running {
 		return
@@ -57,6 +70,10 @@ func (js *JobScheduler) AddJob(job Job, startTime time.Time) {
 	}(js.quit)
 }
 
+// Add a function object as recurrent job to job scheduler. The job would be executed
+// recurrently with an interval of `interval`. The first execution would happen at
+// `startTime`. If startTime is equal or earlier than `time.Now()`, the first job
+// execution would happen immediately and then executes with interval.
 func (js *JobScheduler) AddRecurrentJob(job Job, startTime time.Time, interval time.Duration) {
 	if !js.running {
 		return
@@ -85,6 +102,10 @@ func (js *JobScheduler) AddRecurrentJob(job Job, startTime time.Time, interval t
 	}(js.quit)
 }
 
+// Stop the job scheduler instance. This is a blocking call to stop all the jobs that
+// have been added to this scheduler and wait for all the goroutines to stop. It's
+// required to call Stop from the goroutine where JobScheduler instance is created
+// before it terminates, otherwise the program might have a panic or crash.
 func (js *JobScheduler) Stop() {
 	if !js.running {
 		return
