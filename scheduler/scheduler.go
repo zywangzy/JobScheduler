@@ -1,7 +1,6 @@
-package main
+package scheduler
 
 import (
-	"fmt"
 	"sync"
 	"time"
 )
@@ -18,22 +17,34 @@ import (
  */
 
 type JobScheduler struct {
-	quit  chan bool
-	wg    sync.WaitGroup
-	pwg  *sync.WaitGroup
+	running bool
+	quit    chan bool
+	wg      sync.WaitGroup
+	pwg     *sync.WaitGroup
 }
 
 type Job func()
 
 func NewJobScheduler() *JobScheduler {
 	js := JobScheduler{
-		quit: make(chan bool),
+		running: false,
+		quit:    make(chan bool),
 	}
 	js.pwg = &js.wg
 	return &js
 }
 
-func (js *JobScheduler) addJob(job Job, startTime time.Time) {
+func (js *JobScheduler) Start() {
+	if js.running {
+		return
+	}
+	js.running = true
+}
+
+func (js *JobScheduler) AddJob(job Job, startTime time.Time) {
+	if !js.running {
+		return
+	}
 	go func(quit chan bool) {
 		defer js.pwg.Done()
 		js.pwg.Add(1)
@@ -46,7 +57,10 @@ func (js *JobScheduler) addJob(job Job, startTime time.Time) {
 	}(js.quit)
 }
 
-func (js *JobScheduler) addRecurrentJob(job Job, startTime time.Time, interval time.Duration) {
+func (js *JobScheduler) AddRecurrentJob(job Job, startTime time.Time, interval time.Duration) {
+	if !js.running {
+		return
+	}
 	go func(quit chan bool) {
 		defer js.pwg.Done()
 		js.pwg.Add(1)
@@ -54,9 +68,9 @@ func (js *JobScheduler) addRecurrentJob(job Job, startTime time.Time, interval t
 		case <- quit:
 			return
 		case <- time.After(startTime.Sub(time.Now())):
-			fmt.Println(time.Now(), "Start recurrent job cycle")
 		}
 		ticker := time.NewTicker(interval)
+		job()
 		for {
 			select {
 			case <-quit:
@@ -72,24 +86,13 @@ func (js *JobScheduler) addRecurrentJob(job Job, startTime time.Time, interval t
 }
 
 func (js *JobScheduler) Stop() {
+	if !js.running {
+		return
+	}
+	js.running = false
 	close(js.quit)
 	js.pwg.Wait()
 }
 
-func main() {
-	fmt.Println(time.Now(), "Started")
-	job := func() {
-		fmt.Println(time.Now(), "Job done")
-	}
-	rjob := func() {
-		fmt.Println(time.Now(), "Recurrent Job done")
-	}
-	js := NewJobScheduler()
-	js.addJob(job, time.Now().Add(time.Second * 1))
-	js.addJob(job, time.Now().Add(time.Second * 3))
-	js.addRecurrentJob(rjob, time.Now().Add(time.Second), time.Second)
-	time.Sleep(time.Second * 10)
-	js.Stop()
-	fmt.Println(time.Now(), "All done")
-}
+
 
