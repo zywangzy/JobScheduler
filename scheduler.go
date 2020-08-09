@@ -21,15 +21,15 @@ import (
 // jobScheduler.AddRecurrentJob(job, interval)
 // jobScheduler.Stop()
 type JobScheduler struct {
-	running bool
-	quit    chan bool
-	wg      sync.WaitGroup
+	running  bool
+	quit     chan bool
+	wg       sync.WaitGroup
 	pwg     *sync.WaitGroup
 }
 
 // Class Job to be executed by job scheduler. Notice that the Job instances don't return
 // values explicitly.
-type Job func()
+type Job func(params ...interface{})
 
 // Function to create new JobScheduler instance, which returns a pointer pointing to the
 // newly created instance.
@@ -54,7 +54,7 @@ func (js *JobScheduler) Start() {
 // Add a function object as job to the job scheduler. The job would be executed exactly
 // once at `startTime`. If startTime is equal or earlier than `time.Now()`, the job
 // would be executed immediately after the function is called.
-func (js *JobScheduler) AddJob(job Job, startTime time.Time) {
+func (js *JobScheduler) AddJob(job Job, startTime time.Time, jobParams ...interface{}) {
 	if !js.running {
 		return
 	}
@@ -65,7 +65,7 @@ func (js *JobScheduler) AddJob(job Job, startTime time.Time) {
 		case <- quit:
 			return
 		case <- time.After(startTime.Sub(time.Now())):
-			job()
+			job(jobParams...)
 		}
 	}(js.quit)
 }
@@ -74,7 +74,7 @@ func (js *JobScheduler) AddJob(job Job, startTime time.Time) {
 // recurrently with an interval of `interval`. The first execution would happen at
 // `startTime`. If startTime is equal or earlier than `time.Now()`, the first job
 // execution would happen immediately and then executes with interval.
-func (js *JobScheduler) AddRecurrentJob(job Job, startTime time.Time, interval time.Duration) {
+func (js *JobScheduler) AddRecurrentJob(job Job, startTime time.Time, interval time.Duration, jobParams ...interface{}) {
 	if !js.running {
 		return
 	}
@@ -94,7 +94,7 @@ func (js *JobScheduler) AddRecurrentJob(job Job, startTime time.Time, interval t
 				ticker.Stop()
 				return
 			case <-ticker.C:
-				job()
+				job(jobParams...)
 			default:
 				time.Sleep(time.Second)
 			}
@@ -114,6 +114,4 @@ func (js *JobScheduler) Stop() {
 	close(js.quit)
 	js.pwg.Wait()
 }
-
-
 
