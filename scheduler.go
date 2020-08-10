@@ -66,10 +66,12 @@ func (js *JobScheduler) AddJob(job Job, startTime time.Time, jobParams ...interf
 	go func(quit chan bool) {
 		defer js.pwg.Done()
 		js.pwg.Add(1)
+		timer := time.NewTimer(startTime.Sub(time.Now()))
 		select {
 		case <-quit:
+			timer.Stop()
 			return
-		case <-time.After(startTime.Sub(time.Now())):
+		case <-timer.C:
 			job(jobParams...)
 		}
 	}(js.quit)
